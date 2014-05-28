@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black">
+        <title>Luncheon Map</title>
+        <style>
+            * {
+                font-size: 1em;
+                box-sizing: border-box;
+                -moz-box-sizing: border-box;
+            }
+            html, body {
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                font-size: 81.25%;
+                font-family: 'Meiryo UI',sans-serif;
+            }
+            table {
+                border-collapse: collapse;
+            }
+            .button {
+                cursor: pointer;
+                white-space: nowrap;
+                border-radius: 5px;
+                padding: .2em .6em;
+                font-weight: bold;
+                color: #333333;
+                background-color: white;
+                border: 1px solid #666666;
+            }
+            .tab {
+                cursor: pointer;
+                height: 32px;
+                width: 20%;
+                vertical-align: middle;
+                font-size: 11px;
+                text-align: center;
+                background: #434343;
+                color: white;
+                border: 1px solid white;
+                border-bottom-width: 0;
+            }
+            .hidden-container {
+                display: none;
+                position: absolute;
+                left: 0;
+                right: 0;
+                color: white;
+                background: rgba(32, 32, 32, .6);
+            }
+
+            #map-container .balloon-name {
+                display: inline-block;
+                font-size: 1.2em;
+            }
+            #map-container .balloon-icon-favorite {
+                display: inline-block;
+                margin-left: .5em;
+                font-size: 1.2em;
+                color: #FFCC00;
+            }
+            #map-container .button {
+                font-weight: bold;
+            }
+        </style>
+
+        <!-- Places API [ https://developers.google.com/maps/documentation/javascript/places?hl=ja ] -->
+        <script charset="utf-8" src="http://maps.googleapis.com/maps/api/js?v=3&region=JP&libraries=places&sensor=false"></script>
+        <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+    </head>
+    <body>
+        <table style="width: 100%; height: 100%;">
+            <tr>
+                <td colspan="5" style="height: 100%;">
+                    <div id="map-container" style="height: 100%;"></div>
+                </td>
+            </tr>
+            <tr>
+                <td class="tab" onclick="$('#keyword-search-container').slideToggle().find('input').focus();">検索</td>
+                <td class="tab" onclick="displayFavorites()">お気に入り</td>
+                <td class="tab" onclick="displayHistories()">履歴</td>
+                <td class="tab" id="random-choice-button">無作為選択</td>
+                <td class="tab" onclick="placeMarkers.clear()">クリア</td>
+            </tr>
+        </table>
+
+        <!-- キーワード検索 -->
+        <form class="hidden-container" id="keyword-search-container" style="top: 0;" onsubmit="if(this.keyword.value){search(this.keyword.value,500);$(this).slideUp();}return false;">
+            <table style="width: 100%;">
+                <tr>
+                    <td><input type="text" name="keyword" style="width: 100%;"></td>
+                    <td style="width: 1px;"><div class="button" onclick="$('#keyword-search-container').slideUp()">キャンセル</div></td>
+                </tr>
+            </table>
+        </form>
+
+        <div id="loading-indicator" style="position: absolute; top: 0; bottom: 0; left: 0; right: 0; padding: 2%; background: transparent;">
+            <table style="width: 100%; height: 100%;">
+                <tr>
+                    <td style="text-align: center; vertical-align: middle; border-radius: 8px; background: rgba(64,64,64,.6); color: white;">loading...</td>
+                </tr>
+            </table>
+        </div>
+
+        <script>
+            var loading = {
+                start: $.proxy($.fn.fadeIn, $('#loading-indicator')),
+                end: $.proxy($.fn.fadeOut, $('#loading-indicator'))
+            };
+
+            var PlaceRecord = function (place) {
+                this.id = place.id;
+                this.name = place.name;
+                this.vicinity = place.vicinity;
+                this.latitude = place.latitude || place.geometry.location.lat();
+                this.longitude = place.longitude || place.geometry.location.lng();
+                this.geometry = { location: new google.maps.LatLng(this.latitude, this.longitude) };
+            };
+            var PlaceRecords = function (storeKey) {
+                this.storeKey = storeKey;
+                this.items = [];
+                this.contains = function (place) {
+                    return this.items.some(function (item) { return item && item.id === place.id; });
+                };
+                this.append = function (place) {
+                    this.items.push(new PlaceRecord(place));
+                    localStorage.setItem(this.storeKey, JSON.stringify(this.items));
+                };
+                this.remove = function (place) {
+                    this.items.splice(this.items.indexOf(place), 1);
+                    localStorage.setItem(this.storeKey, JSON.stringify(this.items));
+                };
+                this.restore = function () {
+                    this.items = [];
+                    var jsonRestored = localStorage.getItem(this.storeKey);
+                    var restored = jsonRestored && JSON.parse(jsonRestored);
+                    console.log('restored[' + this.storeKey + ']: ', restored);
+                    restored && restored.forEach(function (record) {
+                        record && this.items.push(new PlaceRecord(record));
+                    }, this);
+                };
+            };
+            var favorites = new PlaceRecords('favorites');
+            favorites.restore();
+            var histories = new PlaceRecords('histories');
+
+            var toggleFavorite = function (div) {
+                var placeMarker = placeMarkers.find(div.getAttribute('data-place-id'));
+                console.log('toggle favorite: ', placeMarker);
+                if (favorites.contains(placeMarker.place)) {
+                    if (confirm('お気に入りから削除しますか？')) {
+                        favorites.remove(placeMarker.place);
+                        div.textContent = '☆';
+                    }
+                } else {
+                    favorites.append(placeMarker.place);
+                    div.textContent = '★';
+                }
+            };
+            var appendHistory = function (div) {
+                var placeMarker = placeMarkers.find(div.getAttribute('data-place-id'));
+                console.log('append history: ', placeMarker);
+                histories.append(placeMarker.place);
+            };
+
+            var PlaceMarker = function (map, place, balloon) {
+                var self = this;
+                this.place = place;
+                this.balloon = balloon;
+                this.marker = new google.maps.Marker({ map: map, position: place.geometry.location, title: place.name, animation: google.maps.Animation.DROP });
+                this.setMap = function (map) { this.marker.setMap(map); };
+                this.openBalloon = function () {
+                    if (this.balloon) {
+                        this.balloon.setContent(
+                            '<div class="balloon-name">' + this.place.name + '</div>' +
+                            '<div class="balloon-icon-favorite" data-place-id="' + this.place.id + '" onclick="toggleFavorite(this)">' + (favorites.contains(this.place) ? '★' : '☆') + '</div>' +
+                            '<div class="balloon-vicinity">' + this.place.vicinity + '</div>' +
+                            '<div class="button" data-place-id="' + this.place.id + '" onclick="appendHistory(this)" style="display: inline-block;">ここへ行く</div>'
+                        );
+                        this.balloon.open(this.marker.getMap(), this.marker);
+                    }
+                };
+                this.bounce = function (timeout) {
+                    this.marker.setAnimation(google.maps.Animation.BOUNCE);
+                    setTimeout(function () { self.marker.setAnimation(null); }, timeout);
+                };
+                google.maps.event.addListener(this.marker, 'click', function () { self.openBalloon(); });
+            };
+            var PlaceMarkerArray = function () {
+                this.items = [];
+                this.getAt = function (index) {
+                    return this.items[index];
+                };
+                this.find = function (id) {
+                    for (var i = 0; i < this.items.length; i++) {
+                        if (this.items[i].place.id === id) {
+                            return this.items[i];
+                        }
+                    }
+                };
+                this.append = function (placeMarker) {
+                    this.items.push(placeMarker);
+                };
+                this.removeAt = function (index) {
+                    this.items[index].setMap(null);
+                    this.items.splice(index, 1);
+                };
+                this.clear = function () {
+                    this.items.forEach(function (placeMarker) { placeMarker.setMap(null); });
+                    this.items = [];
+                };
+                Object.defineProperty(this, 'length', {
+                    get: function () { return this.items.length; }
+                });
+            };
+            var map = new google.maps.Map(document.getElementById('map-container'), {
+                zoom: window.innerWidth < 640 ? 15 : 16,
+                mapTypeId: google.maps.MapTypeId.ROADMAP,
+                mapTypeControl: false,
+                streetViewControl: false
+            });
+            var balloon = new google.maps.InfoWindow();
+            var circle = new google.maps.Circle({ clickable: false, fillColor: 'orange', strokeColor: 'orange' });
+            var placeMarkers = new PlaceMarkerArray();
+            var placesService = new google.maps.places.PlacesService(map);
+            var search = function (keyword, radius) {
+                loading.start();
+                circle.setCenter(map.getCenter());
+                circle.setRadius(radius);
+                circle.setMap(map);
+                placesService.search({ location: map.getCenter(), radius: radius, keyword: keyword }, function (places, status) {
+                    loading.end();
+                    console.log('places:', arguments);
+                    if (status === google.maps.places.PlacesServiceStatus.OK) {
+                        places.forEach(function (place) { placeMarkers.append(new PlaceMarker(map, place, balloon)); });
+                    }
+                });
+            };
+            // 現在地取得
+            navigator.geolocation.getCurrentPosition(
+                function (position) {
+                    console.log(position);
+                    map.setCenter(new google.maps.LatLng(position.coords.latitude, position.coords.longitude));
+                    // 定期更新する場合
+                    // navigator.geolocation.watchPosition(function (position) {
+                    //     map.setCenter(new google.maps.LatLng(position.coords.latitude, position.coords.longitude));
+                    // });
+                    loading.end();
+                },
+                function (error) {
+                    alert('位置情報を取得できませんでした。\nMessage: ' + error.message);
+                    console.log(error);
+                    map.setCenter(new google.maps.LatLng(35.64574098673823, 139.74516057968137));
+                    loading.end();
+                }
+            );
+
+            var displayFavorites = function () {
+                favorites.items.forEach(function (place) { placeMarkers.append(new PlaceMarker(map, place, balloon)); });
+            };
+            var displayHistories = function () {
+                histories.restore();
+                histories.items.forEach(function (place) { placeMarkers.append(new PlaceMarker(map, place, balloon)); });
+            };
+            displayFavorites();
+
+            // ランダム選択
+            document.getElementById('random-choice-button').addEventListener('click', function () {
+                var timeoutInMilliseconds = 1200 / placeMarkers.length;
+                var onTimeout = function () {
+                    if (placeMarkers.length === 1) {
+                        placeMarkers.getAt(0).bounce(2130);
+                        placeMarkers.getAt(0).openBalloon();
+                    } else if (placeMarkers.length > 1) {
+                        placeMarkers.removeAt(Math.floor(Math.random() * placeMarkers.length));
+                        setTimeout(onTimeout, timeoutInMilliseconds);
+                    }
+                };
+                onTimeout();
+            }, false);
+        </script>
+    </body>
+</html>
