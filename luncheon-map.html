@@ -29,22 +29,39 @@
                 white-space: nowrap;
                 border-radius: 5px;
                 padding: .2em .6em;
-                font-weight: bold;
+                text-shadow: 1px 1px 1px #999999;
                 color: #333333;
-                background-color: white;
+                background-color: #f0f0f0;
                 border: 1px solid #666666;
+            }
+            .tabbar td {
+                vertical-align: middle;
+                text-align: center;
+                height: 32px;
+                border: 1px solid white;
+                border-bottom-width: 0;
+                background: #434343;
+            }
+            .tabbar td:first-child {
+                border-left-width: 0;
             }
             .tab {
                 cursor: pointer;
-                height: 32px;
-                width: 20%;
-                vertical-align: middle;
                 font-size: 11px;
-                text-align: center;
-                background: #434343;
                 color: white;
-                border: 1px solid white;
-                border-bottom-width: 0;
+            }
+            .watch-position-button {
+                cursor: pointer;
+                width: 24px;
+                height: 24px;
+                margin: 0 4px;
+                background: #f0f0f0;  /* todo: アイコン */
+                border-radius: 5px;
+                border: groove 1px;
+            }
+            .watch-position-button.active {
+                background: #ccccff;
+                border: ridge 1px;
             }
             .hidden-container {
                 display: none;
@@ -72,26 +89,25 @@
 
         <!-- Places API [ https://developers.google.com/maps/documentation/javascript/places?hl=ja ] -->
         <script charset="utf-8" src="http://maps.googleapis.com/maps/api/js?v=3&region=JP&libraries=places&sensor=false"></script>
-        <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
     </head>
     <body>
         <table style="width: 100%; height: 100%;">
             <tr>
-                <td colspan="5" style="height: 100%;">
-                    <div id="map-container" style="height: 100%;"></div>
-                </td>
+                <td colspan="6" style="height: 100%;"><div id="map-container" style="height: 100%;"></div></td>
             </tr>
-            <tr>
-                <td class="tab" onclick="$('#keyword-search-container').slideToggle().find('input').focus();">検索</td>
-                <td class="tab" onclick="displayFavorites()">お気に入り</td>
-                <td class="tab" onclick="displayHistories()">履歴</td>
-                <td class="tab" id="random-choice-button">無作為選択</td>
-                <td class="tab" onclick="placeMarkers.clear()">クリア</td>
+            <tr class="tabbar">
+                <td><div class="watch-position-button" onclick="if(positionWatcher.watchId){$(this).removeClass('active');positionWatcher.stop();}else{$(this).addClass('active');positionWatcher.start();}">p</div></td>
+                <td width="19%" class="tab" onclick="$('#keyword-search-container').slideToggle().find('input').focus();">検索</td>
+                <td width="23%" class="tab" onclick="displayFavorites()">お気に入り</td>
+                <td width="19%" class="tab" onclick="displayHistories()">履歴</td>
+                <td width="20%" class="tab" id="random-choice-button">自動選択</td>
+                <td width="19%" class="tab" onclick="placeMarkers.clear()">クリア</td>
             </tr>
         </table>
 
         <!-- キーワード検索 -->
-        <form class="hidden-container" id="keyword-search-container" style="top: 0;" onsubmit="if(this.keyword.value){search(this.keyword.value,500);$(this).slideUp();}return false;">
+        <form class="hidden-container" id="keyword-search-container" style="top: 0;" onsubmit="if(this.keyword.value){$(':focus').blur();$(this).slideUp();search(this.keyword.value,500);}return false;">
             <table style="width: 100%;">
                 <tr>
                     <td><input type="text" name="keyword" style="width: 100%;"></td>
@@ -100,7 +116,7 @@
             </table>
         </form>
 
-        <div id="loading-indicator" style="position: absolute; top: 0; bottom: 0; left: 0; right: 0; padding: 2%; background: transparent;">
+        <div id="loading-indicator" style="display: none; position: absolute; top: 0; bottom: 0; left: 0; right: 0; padding: 2%; background: transparent;">
             <table style="width: 100%; height: 100%;">
                 <tr>
                     <td style="text-align: center; vertical-align: middle; border-radius: 8px; background: rgba(64,64,64,.6); color: white;">loading...</td>
@@ -219,7 +235,10 @@
                     get: function () { return this.items.length; }
                 });
             };
+
             var map = new google.maps.Map(document.getElementById('map-container'), {
+                // todo: restore center and zoom
+                center: new google.maps.LatLng(35.64574098673823, 139.74516057968137),
                 zoom: window.innerWidth < 640 ? 15 : 16,
                 mapTypeId: google.maps.MapTypeId.ROADMAP,
                 mapTypeControl: false,
@@ -235,6 +254,7 @@
                 circle.setRadius(radius);
                 circle.setMap(map);
                 placesService.search({ location: map.getCenter(), radius: radius, keyword: keyword }, function (places, status) {
+                    circle.setMap(null);
                     loading.end();
                     console.log('places:', arguments);
                     if (status === google.maps.places.PlacesServiceStatus.OK) {
@@ -242,24 +262,27 @@
                     }
                 });
             };
+
             // 現在地取得
-            navigator.geolocation.getCurrentPosition(
-                function (position) {
-                    console.log(position);
-                    map.setCenter(new google.maps.LatLng(position.coords.latitude, position.coords.longitude));
-                    // 定期更新する場合
-                    // navigator.geolocation.watchPosition(function (position) {
-                    //     map.setCenter(new google.maps.LatLng(position.coords.latitude, position.coords.longitude));
-                    // });
-                    loading.end();
+            var positionWatcher = {
+                watchId: null,
+                start: function () {
+                    this.watchId = this.watchId || navigator.geolocation.watchPosition(
+                        function (position) {
+                            map.setCenter(new google.maps.LatLng(position.coords.latitude, position.coords.longitude));
+                        },
+                        function (error) {
+                            alert('位置情報を取得できませんでした。\nMessage: ' + error.message);
+                            console.log(error);
+                            map.setCenter(new google.maps.LatLng(35.64574098673823, 139.74516057968137));
+                        }
+                    );
                 },
-                function (error) {
-                    alert('位置情報を取得できませんでした。\nMessage: ' + error.message);
-                    console.log(error);
-                    map.setCenter(new google.maps.LatLng(35.64574098673823, 139.74516057968137));
-                    loading.end();
-                }
-            );
+                stop: function () {
+                    this.watchId && navigator.geolocation.clearWatch(this.watchId);
+                    this.watchId = null;
+                },
+            };
 
             var displayFavorites = function () {
                 favorites.items.forEach(function (place) { placeMarkers.append(new PlaceMarker(map, place, balloon)); });
@@ -284,6 +307,8 @@
                 };
                 onTimeout();
             }, false);
+
+            loading.end();
         </script>
     </body>
 </html>
