@@ -237,13 +237,23 @@
             };
 
             var map = new google.maps.Map(document.getElementById('map-container'), {
-                // todo: restore center and zoom
-                center: new google.maps.LatLng(35.64574098673823, 139.74516057968137),
-                zoom: window.innerWidth < 640 ? 15 : 16,
+                center: new google.maps.LatLng(
+                    localStorage.getItem('luncheonMap.center.latitude') || 35.64574098673823,
+                    localStorage.getItem('luncheonMap.center.longitude') || 139.74516057968137
+                ),
+                zoom: parseInt(localStorage.getItem('luncheonMap.zoom')) || 16,
                 mapTypeId: google.maps.MapTypeId.ROADMAP,
                 mapTypeControl: false,
                 streetViewControl: false
             });
+            google.maps.event.addListener(map, 'center_changed', function() {
+                localStorage.setItem('luncheonMap.center.latitude', map.getCenter().lat());
+                localStorage.setItem('luncheonMap.center.longitude', map.getCenter().lng());
+            });
+            google.maps.event.addListener(map, 'zoom_changed', function() {
+                localStorage.setItem('luncheonMap.zoom', map.getZoom());
+            });
+
             var balloon = new google.maps.InfoWindow();
             var circle = new google.maps.Circle({ clickable: false, fillColor: 'orange', strokeColor: 'orange' });
             var placeMarkers = new PlaceMarkerArray();
