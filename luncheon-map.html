@@ -88,8 +88,8 @@
         </style>
 
         <!-- Places API [ https://developers.google.com/maps/documentation/javascript/places?hl=ja ] -->
-        <script charset="utf-8" src="http://maps.googleapis.com/maps/api/js?v=3&region=JP&libraries=places&sensor=false"></script>
-        <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+        <script charset="utf-8" src="//maps.googleapis.com/maps/api/js?v=3&region=JP&libraries=places&sensor=false"></script>
+        <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
     </head>
     <body>
         <table style="width: 100%; height: 100%;">
@@ -227,6 +227,13 @@
                     this.items[index].setMap(null);
                     this.items.splice(index, 1);
                 };
+                this.removeIf = function (predicate) {
+                    for (var i = this.items.length - 1; i >= 0; i--) {
+                        if (predicate(this.items[i])) {
+                            this.removeAt(i);
+                        }
+                    }
+                };
                 this.clear = function () {
                     this.items.forEach(function (placeMarker) { placeMarker.setMap(null); });
                     this.items = [];
@@ -305,6 +312,11 @@
 
             // ランダム選択
             document.getElementById('random-choice-button').addEventListener('click', function () {
+                // 画面外のマーカー削除
+                placeMarkers.removeIf(function (placeMarker) {
+                    return !map.getBounds().contains(placeMarker.marker.position);
+                });
+                // ランダム順にマーカー削除
                 var timeoutInMilliseconds = 1200 / placeMarkers.length;
                 var onTimeout = function () {
                     if (placeMarkers.length === 1) {
