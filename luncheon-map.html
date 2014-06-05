@@ -152,19 +152,23 @@
                     this.items.splice(this.items.indexOf(place), 1);
                     localStorage.setItem(this.storeKey, JSON.stringify(this.items));
                 };
-                this.restore = function () {
-                    this.items = [];
-                    var jsonRestored = localStorage.getItem(this.storeKey);
+                this.restoreBy = function (key) {
+                    var jsonRestored = localStorage.getItem(key);
                     var restored = jsonRestored && JSON.parse(jsonRestored);
-                    console.log('restored[' + this.storeKey + ']: ', restored);
+                    console.log('restored[' + key + ']: ', restored);
                     restored && restored.forEach(function (record) {
                         record && this.items.push(new PlaceRecord(record));
                     }, this);
                 };
+                this.restore = function () {
+                    this.items = [];
+                    this.restoreBy(this.storeKey);
+                };
             };
-            var favorites = new PlaceRecords('favorites');
+            var favorites = new PlaceRecords('luncheon.map.favorites');
             favorites.restore();
-            var histories = new PlaceRecords('histories');
+            favorites.restoreBy('favorites'); // todo: 削除
+            var histories = new PlaceRecords('luncheon.map.histories');
 
             var toggleFavorite = function (div) {
                 var placeMarker = placeMarkers.find(div.getAttribute('data-place-id'));
@@ -245,33 +249,28 @@
 
             var map = new google.maps.Map(document.getElementById('map-container'), {
                 center: new google.maps.LatLng(
-                    localStorage.getItem('luncheonMap.center.latitude') || 35.64574098673823,
-                    localStorage.getItem('luncheonMap.center.longitude') || 139.74516057968137
+                    localStorage.getItem('luncheon.map.center.latitude') || 35.64574098673823,
+                    localStorage.getItem('luncheon.map.center.longitude') || 139.74516057968137
                 ),
-                zoom: parseInt(localStorage.getItem('luncheonMap.zoom')) || 16,
+                zoom: parseInt(localStorage.getItem('luncheon.map.zoom')) || 16,
                 mapTypeId: google.maps.MapTypeId.ROADMAP,
                 mapTypeControl: false,
                 streetViewControl: false
             });
             google.maps.event.addListener(map, 'center_changed', function() {
-                localStorage.setItem('luncheonMap.center.latitude', map.getCenter().lat());
-                localStorage.setItem('luncheonMap.center.longitude', map.getCenter().lng());
+                localStorage.setItem('luncheon.map.center.latitude', map.getCenter().lat());
+                localStorage.setItem('luncheon.map.center.longitude', map.getCenter().lng());
             });
             google.maps.event.addListener(map, 'zoom_changed', function() {
-                localStorage.setItem('luncheonMap.zoom', map.getZoom());
+                localStorage.setItem('luncheon.map.zoom', map.getZoom());
             });
 
             var balloon = new google.maps.InfoWindow();
-            var circle = new google.maps.Circle({ clickable: false, fillColor: 'orange', strokeColor: 'orange' });
             var placeMarkers = new PlaceMarkerArray();
             var placesService = new google.maps.places.PlacesService(map);
             var search = function (keyword, radius) {
                 loading.start();
-                circle.setCenter(map.getCenter());
-                circle.setRadius(radius);
-                circle.setMap(map);
-                placesService.search({ location: map.getCenter(), radius: radius, keyword: keyword }, function (places, status) {
-                    circle.setMap(null);
+                placesService.search({ bounds: map.getBounds(), keyword: keyword }, function (places, status) {
                     loading.end();
                     console.log('places:', arguments);
                     if (status === google.maps.places.PlacesServiceStatus.OK) {
