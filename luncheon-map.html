@@ -98,11 +98,11 @@
             </tr>
             <tr class="tabbar">
                 <td><div class="watch-position-button" onclick="if(positionWatcher.watchId){$(this).removeClass('active');positionWatcher.stop();}else{$(this).addClass('active');positionWatcher.start();}">p</div></td>
-                <td width="19%" class="tab" onclick="$('#keyword-search-container').slideToggle().find('input').focus();">検索</td>
-                <td width="23%" class="tab" onclick="displayFavorites()">お気に入り</td>
-                <td width="19%" class="tab" onclick="displayHistories()">履歴</td>
-                <td width="20%" class="tab" id="random-choice-button">自動選択</td>
-                <td width="19%" class="tab" onclick="placeMarkers.clear()">クリア</td>
+                <td width="25%" class="tab" onclick="$('#keyword-search-container').slideToggle().find('input').focus();">検索</td>
+                <td width="25%" class="tab" onclick="displayFavorites()">お気に入り</td>
+                <!-- <td width="25%" class="tab" onclick="displayHistories()">履歴</td> -->
+                <td width="25%" class="tab" id="random-choice-button">自動選択</td>
+                <td width="25%" class="tab" onclick="placeMarkers.clear()">クリア</td>
             </tr>
         </table>
 
@@ -201,7 +201,8 @@
                             '<div class="balloon-name">' + this.place.name + '</div>' +
                             '<div class="balloon-icon-favorite" data-place-id="' + this.place.id + '" onclick="toggleFavorite(this)">' + (favorites.contains(this.place) ? '★' : '☆') + '</div>' +
                             '<div class="balloon-vicinity">' + this.place.vicinity + '</div>' +
-                            '<div class="button" data-place-id="' + this.place.id + '" onclick="appendHistory(this)" style="display: inline-block;">ここへ行く</div>'
+                            // '<div class="button" data-place-id="' + this.place.id + '" onclick="appendHistory(this)" style="display: inline-block;">ここへ行く</div>'
+                            ''
                         );
                         this.balloon.open(this.marker.getMap(), this.marker);
                     }
