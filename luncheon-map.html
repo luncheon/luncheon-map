@@ -90,6 +90,42 @@
         <!-- Places API [ https://developers.google.com/maps/documentation/javascript/places?hl=ja ] -->
         <script charset="utf-8" src="//maps.googleapis.com/maps/api/js?v=3&region=JP&libraries=places&sensor=false"></script>
         <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+        <script>
+            var observeArray = function (array, callback) {
+                ['push', 'pop', 'shift', 'unshift', 'splice', 'reverse', 'sort'].forEach(function (method) {
+                    array[method] = Array.prototype[method] && function () {
+                        Array.prototype[method].apply(array, arguments);
+                        callback.apply(array, [method, arguments]);
+                    };
+                });
+                return array;
+            };
+
+            var createStoredArray = function (key) {
+                var array = observeArray([], function () {
+                    localStorage.setItem(key, JSON.stringify(this));
+                });
+                array.remove = function (value) {
+                    return this.splice(this.indexOf(value), 1);
+                };
+                array.findBy = function (propertyName, propertyValue) {
+                    for (var i = 0; i < this.length; i++) {
+                        if (this[i][propertyName] === propertyValue) {
+                            return this[i];
+                        }
+                    }
+                };
+                array.restore = function () {
+                    var jsonRestored = localStorage.getItem(key);
+                    var restored = jsonRestored && JSON.parse(jsonRestored);
+                    restored && restored.forEach(function (record) {
+                        record && Array.prototype.push.call(this, record);
+                    }, this);
+                    return this;
+                };
+                return array;
+            };
+        </script>
     </head>
     <body>
         <table style="width: 100%; height: 100%;">
@@ -138,55 +174,32 @@
                 this.longitude = place.longitude || place.geometry.location.lng();
                 this.geometry = { location: new google.maps.LatLng(this.latitude, this.longitude) };
             };
-            var PlaceRecords = function (storeKey) {
-                this.storeKey = storeKey;
-                this.items = [];
-                this.contains = function (place) {
-                    return this.items.some(function (item) { return item && item.id === place.id; });
-                };
-                this.append = function (place) {
-                    this.items.push(new PlaceRecord(place));
-                    localStorage.setItem(this.storeKey, JSON.stringify(this.items));
-                };
-                this.remove = function (place) {
-                    this.items.splice(this.items.indexOf(place), 1);
-                    localStorage.setItem(this.storeKey, JSON.stringify(this.items));
-                };
-                this.restoreBy = function (key) {
-                    var jsonRestored = localStorage.getItem(key);
-                    var restored = jsonRestored && JSON.parse(jsonRestored);
-                    console.log('restored[' + key + ']: ', restored);
-                    restored && restored.forEach(function (record) {
-                        record && this.items.push(new PlaceRecord(record));
-                    }, this);
-                };
-                this.restore = function () {
-                    this.items = [];
-                    this.restoreBy(this.storeKey);
-                };
-            };
-            var favorites = new PlaceRecords('luncheon.map.favorites');
-            favorites.restore();
-            favorites.restoreBy('favorites'); // todo: 削除
-            var histories = new PlaceRecords('luncheon.map.histories');
+
+            var favorites = createStoredArray('luncheon.map.favorites').restore();
+            createStoredArray('favorites').restore().forEach(function (item) { favorites.push(item); }); // todo: 削除
+            localStorage.removeItem('favorites');
+            console.log('restored favorites: ', favorites);
 
             var toggleFavorite = function (div) {
                 var placeMarker = placeMarkers.find(div.getAttribute('data-place-id'));
-                console.log('toggle favorite: ', placeMarker);
-                if (favorites.contains(placeMarker.place)) {
+                if (favorites.findBy('id', placeMarker.place.id)) {
                     if (confirm('お気に入りから削除しますか？')) {
-                        favorites.remove(placeMarker.place);
+                        console.log('remove favorite: ', placeMarker);
+                        favorites.remove(favorites.findBy('id', placeMarker.place.id));
                         div.textContent = '☆';
                     }
                 } else {
-                    favorites.append(placeMarker.place);
+                    console.log('append favorite: ', placeMarker);
+                    favorites.push(new PlaceRecord(placeMarker.place));
                     div.textContent = '★';
                 }
             };
+
+            var histories = createStoredArray('luncheon.map.histories');
             var appendHistory = function (div) {
                 var placeMarker = placeMarkers.find(div.getAttribute('data-place-id'));
                 console.log('append history: ', placeMarker);
-                histories.append(placeMarker.place);
+                histories.push(new PlaceRecord(placeMarker.place));
             };
 
             var PlaceMarker = function (map, place, balloon) {
@@ -199,7 +212,7 @@
                     if (this.balloon) {
                         this.balloon.setContent(
                             '<div class="balloon-name">' + this.place.name + '</div>' +
-                            '<div class="balloon-icon-favorite" data-place-id="' + this.place.id + '" onclick="toggleFavorite(this)">' + (favorites.contains(this.place) ? '★' : '☆') + '</div>' +
+                            '<div class="balloon-icon-favorite" data-place-id="' + this.place.id + '" onclick="toggleFavorite(this)">' + (favorites.findBy('id', this.place.id) ? '★' : '☆') + '</div>' +
                             '<div class="balloon-vicinity">' + this.place.vicinity + '</div>' +
                             // '<div class="button" data-place-id="' + this.place.id + '" onclick="appendHistory(this)" style="display: inline-block;">ここへ行く</div>'
                             ''
@@ -302,11 +315,11 @@
             };
 
             var displayFavorites = function () {
-                favorites.items.forEach(function (place) { placeMarkers.append(new PlaceMarker(map, place, balloon)); });
+                favorites.forEach(function (place) { placeMarkers.append(new PlaceMarker(map, new PlaceRecord(place), balloon)); });
             };
             var displayHistories = function () {
                 histories.restore();
-                histories.items.forEach(function (place) { placeMarkers.append(new PlaceMarker(map, place, balloon)); });
+                histories.forEach(function (place) { placeMarkers.append(new PlaceMarker(map, new PlaceRecord(place), balloon)); });
             };
             displayFavorites();
 
