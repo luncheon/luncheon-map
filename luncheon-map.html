@@ -91,46 +91,54 @@
         <script charset="utf-8" src="//maps.googleapis.com/maps/api/js?v=3&region=JP&libraries=places&sensor=false"></script>
         <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
         <script>
-            var observeArray = function (array, callback) {
-                ['push', 'pop', 'shift', 'unshift', 'splice', 'reverse', 'sort'].forEach(function (method) {
-                    array[method] = Array.prototype[method] && function () {
-                        Array.prototype[method].apply(array, arguments);
-                        callback.apply(array, [method, arguments]);
-                    };
-                });
-                return array;
+            var objects = {
+                hasProperties: function (obj, properties) {
+                    for (var key in properties) {
+                        if (obj[key] !== properties[key]) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
             };
 
-            var hasProperties = function (obj, properties) {
-                for (var key in properties) {
-                    if (obj[key] !== properties[key]) {
-                        return false;
+            var arrays = {
+                observe: function (array, callback) {
+                    ['push', 'pop', 'shift', 'unshift', 'splice', 'reverse', 'sort'].forEach(function (method) {
+                        array[method] = Array.prototype[method] && function () {
+                            var before = this.slice(0);
+                            Array.prototype[method].apply(this, arguments);
+                            var after = this.slice(0);
+                            callback.call(this, before, after);
+                        };
+                    });
+                    return array;
+                },
+                removeIf: function (array, predicate) {
+                    for (var i = array.length - 1; i >= 0; i--) {
+                        if (predicate(array[i])) {
+                            array.splice(i, 1);
+                        }
+                    }
+                },
+                removeWhere: function (array, properties) {
+                    this.removeIf(array, function (item) {
+                        return objects.hasProperties(array[i], properties);
+                    });
+                },
+                findWhere: function (array, properties) {
+                    for (var i = 0; i < array.length; i++) {
+                        if (objects.hasProperties(array[i], properties)) {
+                            return array[i];
+                        }
                     }
                 }
-                return true;
             };
 
             var createStoredArray = function (key) {
-                var array = observeArray([], function () {
+                var array = arrays.observe([], function () {
                     localStorage.setItem(key, JSON.stringify(this));
                 });
-                array.removeAt = function (index) {
-                    return this.splice(index, 1);
-                };
-                array.removeWhere = function (properties) {
-                    for (var i = this.length - 1; i >= 0; i--) {
-                        if (hasProperties(this[i], properties)) {
-                            this.removeAt(i);
-                        }
-                    }
-                };
-                array.findWhere = function (properties) {
-                    for (var i = 0; i < this.length; i++) {
-                        if (hasProperties(this[i], properties)) {
-                            return this[i];
-                        }
-                    }
-                };
                 array.restore = function () {
                     var jsonRestored = localStorage.getItem(key);
                     var restored = jsonRestored && JSON.parse(jsonRestored);
@@ -154,7 +162,7 @@
                 <td width="25%" class="tab" onclick="displayFavorites()">お気に入り</td>
                 <!-- <td width="25%" class="tab" onclick="displayHistories()">履歴</td> -->
                 <td width="25%" class="tab" id="random-choice-button">自動選択</td>
-                <td width="25%" class="tab" onclick="placeMarkers.clear()">クリア</td>
+                <td width="25%" class="tab" onclick="placeMarkers.splice(0,placeMarkers.length)">クリア</td>
             </tr>
         </table>
 
@@ -185,24 +193,9 @@
             var favorites = createStoredArray('luncheon.map.favorites').restore();
             console.log('restored favorites: ', favorites);
 
-            var toggleFavorite = function (div) {
-                var placeMarker = placeMarkers.find(div.getAttribute('data-place-id'));
-                if (favorites.findWhere({id: placeMarker.place.id})) {
-                    if (confirm('お気に入りから削除しますか？')) {
-                        console.log('remove favorite: ', placeMarker);
-                        favorites.removeWhere({id: placeMarker.place.id});
-                        div.textContent = '☆';
-                    }
-                } else {
-                    console.log('append favorite: ', placeMarker);
-                    favorites.push(placeMarker.place);
-                    div.textContent = '★';
-                }
-            };
-
             var histories = createStoredArray('luncheon.map.histories');
             var appendHistory = function (div) {
-                var placeMarker = placeMarkers.find(div.getAttribute('data-place-id'));
+                var placeMarker = arrays.findWhere(placeMarkers, {id: div.getAttribute('data-place-id')});
                 console.log('append history: ', placeMarker);
                 histories.push(placeMarker.place);
             };
@@ -215,6 +208,7 @@
                 } else {
                     place.geometry = { location: new google.maps.LatLng(place.latitude, place.longitude) };
                 }
+                this.id = place.id;
                 this.place = place;
                 this.balloon = balloon;
                 this.marker = new google.maps.Marker({
@@ -230,7 +224,7 @@
                             '<div class="balloon-name">' + this.place.name + '</div>' +
                             '<div class="balloon-vicinity">' + this.place.vicinity + '</div>' +
                             // '<div class="button" data-place-id="' + this.place.id + '" onclick="appendHistory(this)" style="display: inline-block;">ここへ行く</div>'
-                            '<div class="balloon-icon-favorite" data-place-id="' + this.place.id + '" onclick="toggleFavorite(this)">' + (favorites.findWhere({id: this.place.id}) ? '★' : '☆') + '</div>' +
+                            '<div class="balloon-icon-favorite" data-place-id="' + this.place.id + '" onclick="toggleFavorite(this)">' + (arrays.findWhere(favorites, {id: this.place.id}) ? '★' : '☆') + '</div>' +
                             ''
                         );
                         this.balloon.open(this.marker.getMap(), this.marker);
@@ -241,40 +235,6 @@
                     setTimeout(function () { self.marker.setAnimation(null); }, timeout);
                 };
                 google.maps.event.addListener(this.marker, 'click', function () { self.openBalloon(); });
-            };
-            var PlaceMarkerArray = function () {
-                this.items = [];
-                this.getAt = function (index) {
-                    return this.items[index];
-                };
-                this.find = function (id) {
-                    for (var i = 0; i < this.items.length; i++) {
-                        if (this.items[i].place.id === id) {
-                            return this.items[i];
-                        }
-                    }
-                };
-                this.append = function (placeMarker) {
-                    this.items.push(placeMarker);
-                };
-                this.removeAt = function (index) {
-                    this.items[index].setMap(null);
-                    this.items.splice(index, 1);
-                };
-                this.removeIf = function (predicate) {
-                    for (var i = this.items.length - 1; i >= 0; i--) {
-                        if (predicate(this.items[i])) {
-                            this.removeAt(i);
-                        }
-                    }
-                };
-                this.clear = function () {
-                    this.items.forEach(function (placeMarker) { placeMarker.setMap(null); });
-                    this.items = [];
-                };
-                Object.defineProperty(this, 'length', {
-                    get: function () { return this.items.length; }
-                });
             };
 
             var map = new google.maps.Map(document.getElementById('map-container'), {
@@ -296,7 +256,15 @@
             });
 
             var balloon = new google.maps.InfoWindow();
-            var placeMarkers = new PlaceMarkerArray();
+            var placeMarkers = arrays.observe([], function (before, after) {
+                if (before.length > after.length) {
+                    before.filter(function (item) {
+                        return after.indexOf(item) === -1;
+                    }).forEach(function (placeMarker) {
+                        placeMarker.setMap(null);
+                    });
+                }
+            });
             var placesService = new google.maps.places.PlacesService(map);
             var search = function (keyword, radius) {
                 loading.start();
@@ -304,17 +272,17 @@
                     loading.end();
                     console.log('places:', arguments);
                     if (status === google.maps.places.PlacesServiceStatus.OK) {
-                        places.forEach(function (place) { placeMarkers.append(new PlaceMarker(map, place, balloon)); });
+                        places.forEach(function (place) { placeMarkers.push(new PlaceMarker(map, place, balloon)); });
                     }
                 });
             };
 
             var displayFavorites = function () {
-                favorites.forEach(function (place) { placeMarkers.append(new PlaceMarker(map, place, balloon)); });
+                favorites.forEach(function (place) { placeMarkers.push(new PlaceMarker(map, place, balloon)); });
             };
             var displayHistories = function () {
                 histories.restore();
-                histories.forEach(function (place) { placeMarkers.append(new PlaceMarker(map, place, balloon)); });
+                histories.forEach(function (place) { placeMarkers.push(new PlaceMarker(map, place, balloon)); });
             };
             displayFavorites();
 
@@ -327,8 +295,8 @@
                             map.setCenter(new google.maps.LatLng(position.coords.latitude, position.coords.longitude));
                         },
                         function (error) {
-                            alert('位置情報を取得できませんでした。\nMessage: ' + error.message);
                             console.log(error);
+                            alert('位置情報を取得できませんでした。\nMessage: ' + error.message);
                         }
                     );
                 },
@@ -341,22 +309,37 @@
             // ランダム選択
             document.getElementById('random-choice-button').addEventListener('click', function () {
                 // 画面外のマーカー削除
-                placeMarkers.removeIf(function (placeMarker) {
+                arrays.removeIf(placeMarkers, function (placeMarker) {
                     return !map.getBounds().contains(placeMarker.marker.position);
                 });
                 // ランダム順にマーカー削除
                 var timeoutInMilliseconds = 1200 / placeMarkers.length;
                 var onTimeout = function () {
                     if (placeMarkers.length === 1) {
-                        placeMarkers.getAt(0).bounce(2130);
-                        placeMarkers.getAt(0).openBalloon();
+                        placeMarkers[0].bounce(2130);
+                        placeMarkers[0].openBalloon();
                     } else if (placeMarkers.length > 1) {
-                        placeMarkers.removeAt(Math.floor(Math.random() * placeMarkers.length));
+                        placeMarkers.splice(Math.floor(Math.random() * placeMarkers.length), 1);
                         setTimeout(onTimeout, timeoutInMilliseconds);
                     }
                 };
                 onTimeout();
             }, false);
+
+            var toggleFavorite = function (div) {
+                var placeMarker = arrays.findWhere(placeMarkers, {id: div.getAttribute('data-place-id')});
+                if (arrays.findWhere(favorites, {id: placeMarker.place.id})) {
+                    if (confirm('お気に入りから削除しますか？')) {
+                        console.log('remove favorite: ', placeMarker);
+                        arrays.removeWhere(favorites, {id: placeMarker.place.id});
+                        div.textContent = '☆';
+                    }
+                } else {
+                    console.log('append favorite: ', placeMarker);
+                    favorites.push(placeMarker.place);
+                    div.textContent = '★';
+                }
+            };
         </script>
     </body>
 </html>
