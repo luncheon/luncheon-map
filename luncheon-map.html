@@ -123,7 +123,7 @@
                 },
                 removeWhere: function (array, properties) {
                     this.removeIf(array, function (item) {
-                        return objects.hasProperties(array[i], properties);
+                        return objects.hasProperties(item, properties);
                     });
                 },
                 findWhere: function (array, properties) {
@@ -148,6 +148,17 @@
                     return this;
                 };
                 return array;
+            };
+
+            var PositionWatcher = function (onsuccess, onerror) {
+                this.watchId = null;
+                this.start = function () {
+                    this.watchId = this.watchId || navigator.geolocation.watchPosition(onsuccess, onerror);
+                };
+                this.stop = function () {
+                    this.watchId && navigator.geolocation.clearWatch(this.watchId);
+                    this.watchId = null;
+                };
             };
         </script>
     </head>
@@ -287,24 +298,15 @@
             displayFavorites();
 
             // 現在地取得
-            var positionWatcher = {
-                watchId: null,
-                start: function () {
-                    this.watchId = this.watchId || navigator.geolocation.watchPosition(
-                        function (position) {
-                            map.setCenter(new google.maps.LatLng(position.coords.latitude, position.coords.longitude));
-                        },
-                        function (error) {
-                            console.log(error);
-                            alert('位置情報を取得できませんでした。\nMessage: ' + error.message);
-                        }
-                    );
+            var positionWatcher = new PositionWatcher(
+                function (position) {
+                    map.setCenter(new google.maps.LatLng(position.coords.latitude, position.coords.longitude));
                 },
-                stop: function () {
-                    this.watchId && navigator.geolocation.clearWatch(this.watchId);
-                    this.watchId = null;
-                },
-            };
+                function (error) {
+                    console.log(error);
+                    alert('位置情報を取得できませんでした。\nMessage: ' + error.message);
+                }
+            );
 
             // ランダム選択
             document.getElementById('random-choice-button').addEventListener('click', function () {
