@@ -45,8 +45,7 @@
                 height: 40px;
                 vertical-align: middle;
                 text-align: center;
-                border: 1px solid #666666;
-                border-bottom-width: 0;
+                border-left: 1px solid #666666;
                 background: #434343;
             }
             .tabbar td:first-child {
@@ -97,78 +96,82 @@
         <script src="//maps.googleapis.com/maps/api/js?v=3&region=JP&libraries=places&sensor=false"></script>
         <script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
         <script>
-            var objects = {
-                hasProperties: function (obj, properties) {
-                    for (var key in properties) {
-                        if (obj[key] !== properties[key]) {
-                            return false;
+            (function () {
+                'use strict';
+
+                this.objects = {
+                    hasProperties: function (obj, properties) {
+                        for (var key in properties) {
+                            if (obj[key] !== properties[key]) {
+                                return false;
+                            }
+                        }
+                        return true;
+                    }
+                };
+
+                this.arrays = {
+                    observe: function (array, callback) {
+                        ['push', 'pop', 'shift', 'unshift', 'splice', 'reverse', 'sort'].forEach(function (method) {
+                            array[method] = Array.prototype[method] && function () {
+                                var before = this.slice(0);
+                                Array.prototype[method].apply(this, arguments);
+                                var after = this.slice(0);
+                                callback.call(this, before, after);
+                            };
+                        });
+                        return array;
+                    },
+                    removeIf: function (array, predicate) {
+                        for (var i = array.length - 1; i >= 0; i--) {
+                            if (predicate(array[i])) {
+                                array.splice(i, 1);
+                            }
+                        }
+                    },
+                    removeWhere: function (array, properties) {
+                        this.removeIf(array, function (item) {
+                            return objects.hasProperties(item, properties);
+                        });
+                    },
+                    findWhere: function (array, properties) {
+                        for (var i = 0; i < array.length; i++) {
+                            if (objects.hasProperties(array[i], properties)) {
+                                return array[i];
+                            }
                         }
                     }
-                    return true;
-                }
-            };
+                };
 
-            var arrays = {
-                observe: function (array, callback) {
-                    ['push', 'pop', 'shift', 'unshift', 'splice', 'reverse', 'sort'].forEach(function (method) {
-                        array[method] = Array.prototype[method] && function () {
-                            var before = this.slice(0);
-                            Array.prototype[method].apply(this, arguments);
-                            var after = this.slice(0);
-                            callback.call(this, before, after);
-                        };
+                this.createStoredArray = function (key) {
+                    var array = arrays.observe([], function () {
+                        localStorage.setItem(key, JSON.stringify(this));
                     });
+                    array.restore = function () {
+                        var jsonRestored = localStorage.getItem(key);
+                        var restored = jsonRestored && JSON.parse(jsonRestored);
+                        restored && restored.forEach(function (record) {
+                            record && Array.prototype.push.call(this, record);
+                        }, this);
+                        return this;
+                    };
                     return array;
-                },
-                removeIf: function (array, predicate) {
-                    for (var i = array.length - 1; i >= 0; i--) {
-                        if (predicate(array[i])) {
-                            array.splice(i, 1);
-                        }
-                    }
-                },
-                removeWhere: function (array, properties) {
-                    this.removeIf(array, function (item) {
-                        return objects.hasProperties(item, properties);
-                    });
-                },
-                findWhere: function (array, properties) {
-                    for (var i = 0; i < array.length; i++) {
-                        if (objects.hasProperties(array[i], properties)) {
-                            return array[i];
-                        }
-                    }
-                }
-            };
+                };
 
-            var createStoredArray = function (key) {
-                var array = arrays.observe([], function () {
-                    localStorage.setItem(key, JSON.stringify(this));
-                });
-                array.restore = function () {
-                    var jsonRestored = localStorage.getItem(key);
-                    var restored = jsonRestored && JSON.parse(jsonRestored);
-                    restored && restored.forEach(function (record) {
-                        record && Array.prototype.push.call(this, record);
-                    }, this);
-                    return this;
+                this.PositionWatcher = function (onsuccess, onerror) {
+                    this.watchId = null;
+                    this.start = function () {
+                        return this.watchId = this.watchId || navigator.geolocation.watchPosition(onsuccess, onerror);
+                    };
+                    this.stop = function () {
+                        this.watchId && navigator.geolocation.clearWatch(this.watchId);
+                        return this.watchId = null;
+                    };
+                    this.toggle = function () {
+                        return this.watchId ? this.stop() : this.start();
+                    };
                 };
-                return array;
-            };
-
-            var PositionWatcher = function (onsuccess, onerror) {
-                this.watchId = null;
-                this.start = function () {
-                    return this.watchId = this.watchId || navigator.geolocation.watchPosition(onsuccess, onerror);
-                };
-                this.stop = function () {
-                    this.watchId && navigator.geolocation.clearWatch(this.watchId);
-                    return this.watchId = null;
-                };
-                this.toggle = function () {
-                    return this.watchId ? this.stop() : this.start();
-                };
-            };
+            }).call(this);
         </script>
     </head>
     <body>
@@ -227,18 +230,18 @@
                     </div>
                 </td>
                 <td width="20%" class="tab" onclick="$('#keyword-search-container').slideToggle().find('input').focus();">
-                    <svg viewBox="-8 -8 48 48" height="32">
+                    <svg viewBox="-8 -10 48 48" height="32">
                         <use xlink:href="#search"></use>
                     </svg>
                 </td>
                 <td width="20%" class="tab" onclick="displayFavorites()">
-                    <svg viewBox="-8 -8 48 48" height="32">
+                    <svg viewBox="-8 -10 48 48" height="32">
                         <use xlink:href="#star"></use>
                     </svg>
                 </td>
                 <!-- <td width="25%" class="tab" onclick="displayHistories()">履歴</td> -->
                 <td width="20%" class="tab" id="random-choice-button">
-                    <svg viewBox="-25 -25 150 150" height="32">
+                    <svg viewBox="-25 -36 150 150" height="32">
                         <use xlink:href="#dice"></use>
                     </svg>
                 </td>
