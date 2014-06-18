@@ -52,7 +52,7 @@
             .tabbar td:first-child {
                 border-left-width: 0;
             }
-            .tab {
+            .tab svg {
                 cursor: pointer;
                 color: white;
                 fill: white;
@@ -64,7 +64,7 @@
                 padding: 0;
             }
             .watch-position-button.active {
-                background: #ccccff;
+                background: #bbccff;
                 border: ridge 1px;
             }
             .hidden-container {
@@ -80,17 +80,22 @@
                 display: inline-block;
                 font-size: 1.2em;
             }
+            #map-container .balloon-rating,
+            #map-container .balloon-price_level {
+                margin-left: 1em;
+            }
             #map-container .balloon-icon-favorite {
                 display: inline-block;
                 margin-left: .5em;
+                margin-right: 2em;
                 font-size: 1.2em;
                 color: #ffcc00;
             }
         </style>
 
         <!-- Places API [ https://developers.google.com/maps/documentation/javascript/places?hl=ja ] -->
-        <script charset="utf-8" src="//maps.googleapis.com/maps/api/js?v=3&region=JP&libraries=places&sensor=false"></script>
-        <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+        <script src="//maps.googleapis.com/maps/api/js?v=3&region=JP&libraries=places&sensor=false"></script>
+        <script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
         <script>
             var objects = {
                 hasProperties: function (obj, properties) {
@@ -154,11 +159,14 @@
             var PositionWatcher = function (onsuccess, onerror) {
                 this.watchId = null;
                 this.start = function () {
-                    this.watchId = this.watchId || navigator.geolocation.watchPosition(onsuccess, onerror);
+                    return this.watchId = this.watchId || navigator.geolocation.watchPosition(onsuccess, onerror);
                 };
                 this.stop = function () {
                     this.watchId && navigator.geolocation.clearWatch(this.watchId);
-                    this.watchId = null;
+                    return this.watchId = null;
+                };
+                this.toggle = function () {
+                    return this.watchId ? this.stop() : this.start();
                 };
             };
         </script>
@@ -212,7 +220,7 @@
             </tr>
             <tr class="tabbar">
                 <td>
-                    <div class="button watch-position-button" onclick="if(positionWatcher.watchId){$(this).removeClass('active');positionWatcher.stop();}else{$(this).addClass('active');positionWatcher.start();}">
+                    <div class="button watch-position-button" onclick="$(this).toggleClass('active',positionWatcher.toggle());">
                         <svg viewBox="-8 -8 48 48">
                             <use xlink:href="#connect"></use>
                         </svg>
@@ -303,13 +311,16 @@
                     animation: google.maps.Animation.DROP
                 });
                 this.setMap = function (map) { this.marker.setMap(map); };
+                var priceLevels = ['無料', '安い', '普通', '高い', '激高'];
                 this.openBalloon = function () {
                     if (this.balloon) {
                         this.balloon.setContent(
                             '<div class="balloon-name">' + this.place.name + '</div>' +
-                            '<div class="balloon-vicinity">' + this.place.vicinity + '</div>' +
-                            // '<div class="button" data-place-id="' + this.place.id + '" onclick="appendHistory(this)" style="display: inline-block;">ここへ行く</div>'
                             '<div class="balloon-icon-favorite" data-place-id="' + this.place.id + '" onclick="toggleFavorite(this)">' + (arrays.findWhere(favorites, {id: this.place.id}) ? '★' : '☆') + '</div>' +
+                            '<div class="balloon-vicinity">' + this.place.vicinity + '</div>' +
+                            (this.place.rating !== undefined ? '<div class="balloon-rating">クチコミ評価: ' + this.place.rating + '</div>' : '') +
+                            (this.place.price_level !== undefined ? '<div class="balloon-price_level">価格帯: ' + priceLevels[this.place.price_level] + '</div>' : '') +
+                            // '<div class="button" data-place-id="' + this.place.id + '" onclick="appendHistory(this)" style="display: inline-block;">ここへ行く</div>'
                             ''
                         );
                         this.balloon.open(this.marker.getMap(), this.marker);
@@ -350,6 +361,12 @@
                     });
                 }
             });
+            placeMarkers.pushUniquely = function (map, place, balloon) {
+                if (!arrays.findWhere(this, {id: place.id})) {
+                    this.push(new PlaceMarker(map, place, balloon));
+                }
+            };
+
             var placesService = new google.maps.places.PlacesService(map);
             var search = function (keyword, radius) {
                 loading.start();
@@ -357,17 +374,17 @@
                     loading.end();
                     console.log('places:', arguments);
                     if (status === google.maps.places.PlacesServiceStatus.OK) {
-                        places.forEach(function (place) { placeMarkers.push(new PlaceMarker(map, place, balloon)); });
+                        places.forEach(function (place) { placeMarkers.pushUniquely(map, place, balloon); });
                     }
                 });
             };
 
             var displayFavorites = function () {
-                favorites.forEach(function (place) { placeMarkers.push(new PlaceMarker(map, place, balloon)); });
+                favorites.forEach(function (place) { placeMarkers.pushUniquely(map, place, balloon); });
             };
             var displayHistories = function () {
                 histories.restore();
-                histories.forEach(function (place) { placeMarkers.push(new PlaceMarker(map, place, balloon)); });
+                histories.forEach(function (place) { placeMarkers.pushUniquely(map, place, balloon); });
             };
             displayFavorites();
 
