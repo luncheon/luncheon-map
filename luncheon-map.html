@@ -37,9 +37,12 @@
                 font-weight: bold;
                 text-shadow: 1px 1px 1px #999999;
                 color: #333333;
-                background-color: #e8e8e8;
+                background: #e8e8e8;
                 border: 1px groove;
                 fill: #434343;
+            }
+            .button:hover {
+                fill: #999999;
             }
             .tabbar td {
                 height: 40px;
@@ -50,6 +53,9 @@
             }
             .tabbar td:first-child {
                 border-left-width: 0;
+            }
+            .tab:hover {
+                background: #666666;
             }
             .tab svg {
                 cursor: pointer;
@@ -371,7 +377,7 @@
             };
 
             var placesService = new google.maps.places.PlacesService(map);
-            var search = function (keyword, radius) {
+            var search = function (keyword) {
                 loading.start();
                 placesService.search({ bounds: map.getBounds(), keyword: keyword }, function (places, status) {
                     loading.end();
